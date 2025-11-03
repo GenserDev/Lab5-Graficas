@@ -18,16 +18,16 @@ pub struct Camera {
 impl Camera {
     pub fn new(width: u32, height: u32) -> Self {
         Self {
-            position: Vec3::new(0.0, 5.0, 25.0),
+            position: Vec3::new(0.0, 8.0, 35.0),
             target: Vec3::ZERO,
             up: Vec3::Y,
             aspect: width as f32 / height as f32,
-            fovy: PI / 4.0,
+            fovy: PI / 3.0,
             znear: 0.1,
             zfar: 200.0,
             yaw: -PI / 2.0,
-            pitch: 0.0,
-            speed: 10.0,
+            pitch: -0.2,
+            speed: 15.0,
             sensitivity: 0.1,
         }
     }

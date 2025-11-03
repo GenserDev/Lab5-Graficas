@@ -27,7 +27,7 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     return out;
 }
 
-// Función de ruido simplex 3D (reutilizamos las funciones)
+// Función de ruido simplex 3D
 fn mod289_3(x: vec3<f32>) -> vec3<f32> {
     return x - floor(x * (1.0 / 289.0)) * 289.0;
 }
@@ -104,7 +104,7 @@ fn snoise(v: vec3<f32>) -> f32 {
     return 42.0 * dot(m2 * m2, vec4<f32>(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
 }
 
-// Función de turbulencia
+// Función de turbulencia mejorada
 fn turbulence(p: vec3<f32>, octaves: i32) -> f32 {
     var value = 0.0;
     var amplitude = 1.0;
@@ -120,6 +120,22 @@ fn turbulence(p: vec3<f32>, octaves: i32) -> f32 {
     return value;
 }
 
+// FBM para detalles suaves
+fn fbm(p: vec3<f32>, octaves: i32) -> f32 {
+    var value = 0.0;
+    var amplitude = 0.5;
+    var frequency = 1.0;
+    var pos = p;
+    
+    for (var i = 0; i < octaves; i = i + 1) {
+        value = value + snoise(pos * frequency) * amplitude;
+        frequency = frequency * 2.0;
+        amplitude = amplitude * 0.5;
+    }
+    
+    return value;
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let normal = normalize(in.normal);
@@ -128,53 +144,102 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let phi = atan2(normal.z, normal.x);
     let theta = acos(normal.y);
     
-    // Posición para ruido
-    var pos = vec3<f32>(phi * 3.0, theta * 5.0, uniforms.time * 0.1);
+    // Posición para ruido con mayor escala temporal
+    let time_scale = uniforms.time * 0.15;
+    var pos = vec3<f32>(phi * 4.0, theta * 6.0, time_scale);
     
-    // Crear bandas con diferentes velocidades
-    let band1 = snoise(vec3<f32>(pos.x * 0.5 + uniforms.time * 0.3, pos.y * 8.0, 0.0));
-    let band2 = snoise(vec3<f32>(pos.x * 0.7 - uniforms.time * 0.2, pos.y * 12.0, 50.0));
-    let band3 = snoise(vec3<f32>(pos.x * 0.3 + uniforms.time * 0.4, pos.y * 6.0, 100.0));
+    // Crear múltiples capas de bandas con diferentes velocidades y escalas
+    let band1 = snoise(vec3<f32>(pos.x * 0.4 + time_scale * 0.5, pos.y * 10.0, 0.0));
+    let band2 = snoise(vec3<f32>(pos.x * 0.6 - time_scale * 0.3, pos.y * 14.0, 50.0));
+    let band3 = snoise(vec3<f32>(pos.x * 0.3 + time_scale * 0.7, pos.y * 8.0, 100.0));
+    let band4 = snoise(vec3<f32>(pos.x * 0.8 - time_scale * 0.4, pos.y * 18.0, 150.0));
     
-    // Turbulencia para remolinos
-    let turb = turbulence(vec3<f32>(pos.x, pos.y * 2.0, uniforms.time * 0.05), 4);
+    // Detalles finos para textura dentro de las bandas
+    let fine_detail = fbm(vec3<f32>(pos.x * 2.0, pos.y * 20.0, time_scale * 0.2), 3);
     
-    // Combinar bandas
-    var bands = (band1 + band2 * 0.7 + band3 * 0.5) * 0.5 + 0.5;
-    bands = bands + turb * 0.2;
+    // Turbulencia para remolinos y estructuras caóticas
+    let turb1 = turbulence(vec3<f32>(pos.x * 1.5, pos.y * 3.0, time_scale * 0.1), 5);
+    let turb2 = turbulence(vec3<f32>(pos.x * 0.8 + 100.0, pos.y * 2.5, time_scale * 0.15), 4);
     
-    // Gran mancha roja - tormenta característica
-    let storm_center = vec2<f32>(3.14, 1.5);
+    // Combinar todas las bandas con pesos diferentes
+    var bands = band1 * 0.35 + band2 * 0.25 + band3 * 0.2 + band4 * 0.2;
+    bands = bands * 0.5 + 0.5;
+    
+    // Añadir turbulencia para crear zonas de tormenta
+    bands = bands + (turb1 * 0.25 - 0.125);
+    bands = bands + fine_detail * 0.15;
+    
+    // Gran mancha roja - tormenta característica (más grande y prominente)
+    let storm_center = vec2<f32>(2.8, 1.4);
     let storm_dist = distance(vec2<f32>(phi + 3.14, theta), storm_center);
-    let storm = smoothstep(0.5, 0.2, storm_dist);
-    let storm_detail = snoise(vec3<f32>(phi * 10.0, theta * 10.0, uniforms.time * 0.05));
-    let red_spot = storm * (0.5 + storm_detail * 0.5);
     
-    // Colores del planeta gaseoso (tipo Júpiter)
-    let color1 = vec3<f32>(0.85, 0.75, 0.65); // Beige claro
-    let color2 = vec3<f32>(0.65, 0.50, 0.35); // Marrón
-    let color3 = vec3<f32>(0.90, 0.85, 0.75); // Crema
-    let color4 = vec3<f32>(0.55, 0.40, 0.30); // Marrón oscuro
-    let red_storm = vec3<f32>(0.85, 0.35, 0.25); // Rojo de la mancha
+    // Forma ovalada de la tormenta
+    let storm_oval = vec2<f32>(storm_dist, storm_dist * 1.5);
+    let storm = smoothstep(0.6, 0.1, length(storm_oval));
     
-    // Mezclar colores basado en las bandas
-    var color = mix(color1, color2, smoothstep(0.3, 0.5, bands));
-    color = mix(color, color3, smoothstep(0.5, 0.7, bands));
-    color = mix(color, color4, smoothstep(0.7, 0.9, bands));
+    // Detalles internos de la tormenta
+    let storm_detail = snoise(vec3<f32>(phi * 15.0, theta * 15.0, time_scale * 0.08));
+    let storm_swirl = turbulence(vec3<f32>(
+        (phi - storm_center.x) * 8.0, 
+        (theta - storm_center.y) * 8.0, 
+        time_scale * 0.1
+    ), 4);
+    
+    let red_spot = storm * (0.6 + storm_detail * 0.2 + storm_swirl * 0.2);
+    
+    // Paleta de colores más rica para planeta gaseoso tipo Júpiter
+    let color1 = vec3<f32>(0.92, 0.82, 0.70);  // Beige muy claro
+    let color2 = vec3<f32>(0.70, 0.55, 0.40);  // Marrón claro
+    let color3 = vec3<f32>(0.95, 0.88, 0.78);  // Crema brillante
+    let color4 = vec3<f32>(0.58, 0.42, 0.30);  // Marrón medio
+    let color5 = vec3<f32>(0.45, 0.32, 0.22);  // Marrón oscuro
+    let red_storm = vec3<f32>(0.88, 0.38, 0.28); // Rojo-naranja de la mancha
+    let white_zones = vec3<f32>(0.98, 0.95, 0.90); // Zonas blancas brillantes
+    
+    // Mezclar colores basado en las bandas con transiciones más suaves
+    var color = mix(color1, color2, smoothstep(0.25, 0.45, bands));
+    color = mix(color, color3, smoothstep(0.45, 0.55, bands));
+    color = mix(color, color4, smoothstep(0.55, 0.70, bands));
+    color = mix(color, color5, smoothstep(0.70, 0.85, bands));
+    
+    // Añadir zonas blancas donde hay alta turbulencia
+    color = mix(color, white_zones, smoothstep(0.6, 0.9, turb2) * 0.3);
     
     // Agregar la gran mancha roja
     color = mix(color, red_storm, red_spot);
     
-    // Iluminación simple
-    let light_dir = normalize(vec3<f32>(1.0, 1.0, 1.0));
-    let diff = max(dot(normal, light_dir), 0.2);
-    color = color * diff;
+    // Añadir pequeñas tormentas secundarias
+    let small_storm1_center = vec2<f32>(1.5, 2.0);
+    let small_storm1_dist = distance(vec2<f32>(phi + 3.14, theta), small_storm1_center);
+    let small_storm1 = smoothstep(0.25, 0.1, small_storm1_dist);
+    color = mix(color, vec3<f32>(0.75, 0.65, 0.55), small_storm1 * 0.5);
     
-    // Efecto atmosférico en los bordes
+    // Iluminación más dramática
+    let light_dir = normalize(vec3<f32>(1.0, 0.7, 1.0));
+    let diff = max(dot(normal, light_dir), 0.0);
+    let ambient = 0.25;
+    let lighting = ambient + diff * 0.75;
+    
+    color = color * lighting;
+    
+    // Efecto de dispersión subsuperficial (luz difusa en los bordes)
     let view_dir = normalize(vec3<f32>(0.0, 0.0, 1.0));
-    let fresnel = pow(1.0 - abs(dot(normal, view_dir)), 2.0);
-    let atmosphere = vec3<f32>(0.7, 0.6, 0.5) * fresnel * 0.3;
-    color = color + atmosphere;
+    let ndotv = abs(dot(normal, view_dir));
+    let subsurface = pow(1.0 - ndotv, 3.0) * diff;
+    color = color + vec3<f32>(0.6, 0.5, 0.4) * subsurface * 0.2;
+    
+    // Atmósfera brillante y espesa en los bordes
+    let fresnel = pow(1.0 - ndotv, 2.5);
+    let atmosphere = vec3<f32>(0.75, 0.65, 0.55) * fresnel * 0.5;
+    
+    // Añadir brillo extra en la atmósfera donde hay luz
+    let atmosphere_glow = fresnel * diff * vec3<f32>(0.9, 0.8, 0.7) * 0.3;
+    
+    color = color + atmosphere + atmosphere_glow;
+    
+    // Saturación adicional para hacer los colores más vivos
+    let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
+    color = mix(vec3<f32>(luminance), color, 1.15);
     
     return vec4<f32>(color, 1.0);
 }
