@@ -47,3 +47,59 @@ pub fn create_sphere(radius: f32, sectors: u32, stacks: u32) -> (Vec<Vertex>, Ve
 
     (vertices, indices)
 }
+
+pub fn create_ring(inner_radius: f32, outer_radius: f32, segments: u32) -> (Vec<Vertex>, Vec<u32>) {
+    let mut vertices = Vec::new();
+    let mut indices = Vec::new();
+
+    for i in 0..segments {
+        let theta = (i as f32) * (2.0 * std::f32::consts::PI) / segments as f32;
+        let cos_t = theta.cos();
+        let sin_t = theta.sin();
+
+        // inner then outer vertex per segment
+        vertices.push(Vertex { position: [inner_radius * cos_t, 0.0, inner_radius * sin_t] });
+        vertices.push(Vertex { position: [outer_radius * cos_t, 0.0, outer_radius * sin_t] });
+    }
+
+    // Create two triangles per segment
+    for i in 0..segments {
+        let next = (i + 1) % segments;
+        let i0 = i * 2;
+        let i1 = i0 + 1;
+        let n0 = next * 2;
+        let n1 = n0 + 1;
+
+        indices.push(i0 as u32);
+        indices.push(n0 as u32);
+        indices.push(i1 as u32);
+
+        indices.push(i1 as u32);
+        indices.push(n0 as u32);
+        indices.push(n1 as u32);
+    }
+
+    (vertices, indices)
+}
+
+pub fn create_orbit(radius: f32, segments: u32, inclination: f32) -> (Vec<Vertex>, Vec<u32>) {
+    let mut vertices = Vec::new();
+    let mut indices = Vec::new();
+
+    for i in 0..segments {
+        let theta = (i as f32) * (2.0 * std::f32::consts::PI) / segments as f32;
+        let x = radius * theta.cos();
+        let z = radius * theta.sin();
+        let y = theta.sin() * radius * inclination;
+        vertices.push(Vertex { position: [x, y, z] });
+    }
+
+    // Line segments as index pairs for each edge
+    for i in 0..segments {
+        let next = (i + 1) % segments;
+        indices.push(i as u32);
+        indices.push(next as u32);
+    }
+
+    (vertices, indices)
+}

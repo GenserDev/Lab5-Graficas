@@ -2,16 +2,18 @@ mod types;
 mod pipelines;
 mod geometry;
 mod planets;
+mod ship;
+mod skybox;
 
-pub use types::{Vertex, Uniforms};
+pub use types::Uniforms;
 use types::RendererState;
 
-use wgpu::util::DeviceExt;
 use std::sync::Arc;
 use winit::keyboard::KeyCode;
-use glam::Mat4;
+use glam::{Mat4, Vec3, Quat};
 
 use crate::camera::Camera;
+use planets::get_warp_points;
 use planets::Planet;
 
 pub struct Renderer {
@@ -21,6 +23,13 @@ pub struct Renderer {
     camera: Camera,
     time: f32,
     planets: Vec<Planet>,
+    warp_points: Vec<planets::WarpPoint>,
+    current_warp: usize,
+    warp_progress: f32,
+    is_warping: bool,
+    warp_start_pos: Vec3,
+    warp_start_yaw: f32,
+    warp_start_pitch: f32,
     move_forward: bool,
     move_backward: bool,
     move_left: bool,
@@ -41,8 +50,8 @@ impl Renderer {
         let state = RendererState::new(window.clone(), size).await;
         let camera = Camera::new(size.width, size.height);
         
-        // Crear planetas con posiciones iniciales diferentes
         let planets = planets::create_planet_system();
+        let warp_points = get_warp_points();
 
         Self {
             window,
@@ -51,6 +60,13 @@ impl Renderer {
             camera,
             time: 0.0,
             planets,
+            warp_points,
+            current_warp: 0,
+            warp_progress: 0.0,
+            is_warping: false,
+            warp_start_pos: Vec3::ZERO,
+            warp_start_yaw: 0.0,
+            warp_start_pitch: 0.0,
             move_forward: false,
             move_backward: false,
             move_left: false,
@@ -84,7 +100,25 @@ impl Renderer {
             KeyCode::ArrowRight => self.rotate_right = pressed,
             KeyCode::ArrowUp => self.rotate_up = pressed,
             KeyCode::ArrowDown => self.rotate_down = pressed,
+            KeyCode::Digit1 if pressed => self.initiate_warp(0),
+            KeyCode::Digit2 if pressed => self.initiate_warp(1),
+            KeyCode::Digit3 if pressed => self.initiate_warp(2),
+            KeyCode::Digit4 if pressed => self.initiate_warp(3),
+            KeyCode::Digit5 if pressed => self.initiate_warp(4),
+            KeyCode::Digit6 if pressed => self.initiate_warp(5),
+            KeyCode::Digit7 if pressed => self.initiate_warp(6),
             _ => {}
+        }
+    }
+
+    fn initiate_warp(&mut self, warp_index: usize) {
+        if warp_index < self.warp_points.len() && !self.is_warping {
+            self.current_warp = warp_index;
+            self.is_warping = true;
+            self.warp_progress = 0.0;
+            self.warp_start_pos = self.camera.position;
+            self.warp_start_yaw = self.camera.yaw;
+            self.warp_start_pitch = self.camera.pitch;
         }
     }
 
@@ -92,12 +126,50 @@ impl Renderer {
         let dt = dt.as_secs_f32();
         self.time += dt;
 
-        // Actualizar cámara
-        self.update_camera(dt);
+        if self.is_warping {
+            self.update_warp(dt);
+        } else {
+            self.update_camera(dt);
+        }
         
-        // Actualizar planetas
+        self.check_collisions();
+        
         for planet in &mut self.planets {
             planet.update(self.time);
+        }
+    }
+
+    fn update_warp(&mut self, dt: f32) {
+        self.warp_progress += dt * 1.5;
+        
+        if self.warp_progress >= 1.0 {
+            self.warp_progress = 1.0;
+            self.is_warping = false;
+            let target_point = &self.warp_points[self.current_warp];
+            self.camera.position = target_point.position;
+            let dir = (target_point.target - target_point.position).normalize();
+            self.camera.yaw = dir.x.atan2(dir.z);
+            self.camera.pitch = dir.y.asin();
+        } else {
+            let t = ease_in_out_cubic(self.warp_progress);
+            let target_point = &self.warp_points[self.current_warp];
+            
+            self.camera.position = self.warp_start_pos.lerp(target_point.position, t);
+            
+            let start_dir = Vec3::new(
+                self.warp_start_yaw.cos() * self.warp_start_pitch.cos(),
+                self.warp_start_pitch.sin(),
+                self.warp_start_yaw.sin() * self.warp_start_pitch.cos(),
+            );
+            let target_dir = (target_point.target - target_point.position).normalize();
+            
+            let start_quat = Quat::from_rotation_arc(Vec3::Z, start_dir);
+            let target_quat = Quat::from_rotation_arc(Vec3::Z, target_dir);
+            let current_quat = start_quat.slerp(target_quat, t);
+            let current_dir = current_quat * Vec3::Z;
+            
+            self.camera.yaw = current_dir.x.atan2(current_dir.z);
+            self.camera.pitch = current_dir.y.asin();
         }
     }
 
@@ -142,6 +214,21 @@ impl Renderer {
         }
     }
 
+    fn check_collisions(&mut self) {
+        let min_distance = 5.0;
+        
+        for planet in &self.planets {
+            let planet_pos = planet.get_position();
+            let distance = (self.camera.position - planet_pos).length();
+            let collision_radius = planet.scale + min_distance;
+            
+            if distance < collision_radius {
+                let push_dir = (self.camera.position - planet_pos).normalize();
+                self.camera.position = planet_pos + push_dir * collision_radius;
+            }
+        }
+    }
+
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         let output = self.state.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -152,7 +239,20 @@ impl Renderer {
 
         let view_proj = self.camera.build_view_projection_matrix();
 
-        // Actualizar uniformes ANTES del render pass para cada planeta
+        // Actualizar uniform del skybox: centrar skybox en la posición de la cámara
+        let skybox_uniforms = Uniforms {
+            view_proj: view_proj.to_cols_array_2d(),
+            model: Mat4::from_translation(self.camera.position).to_cols_array_2d(),
+            time: self.time,
+            _padding: [0.0; 3],
+        };
+        self.state.queue.write_buffer(
+            &self.state.skybox_uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[skybox_uniforms])
+        );
+
+        // Actualizar uniformes de planetas
         for (i, planet) in self.planets.iter().enumerate() {
             let uniforms = Uniforms {
                 view_proj: view_proj.to_cols_array_2d(),
@@ -160,14 +260,30 @@ impl Renderer {
                 time: self.time,
                 _padding: [0.0; 3],
             };
-
-            // Escribir a un offset específico para cada planeta
             self.state.queue.write_buffer(
-                &self.state.uniform_buffers[i],
+                &self.state.planet_uniform_buffers[i],
                 0,
                 bytemuck::cast_slice(&[uniforms])
             );
         }
+
+        // Actualizar uniformes de la nave
+        let ship_model = Mat4::from_translation(self.camera.position + self.camera.get_forward() * 3.0 + Vec3::new(0.5, -0.5, 0.0))
+            * Mat4::from_rotation_y(self.camera.yaw + std::f32::consts::PI)
+            * Mat4::from_rotation_x(-self.camera.pitch)
+            * Mat4::from_scale(Vec3::splat(0.5));
+        
+        let ship_uniforms = Uniforms {
+            view_proj: view_proj.to_cols_array_2d(),
+            model: ship_model.to_cols_array_2d(),
+            time: self.time,
+            _padding: [0.0; 3],
+        };
+        self.state.queue.write_buffer(
+            &self.state.ship_uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[ship_uniforms])
+        );
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -177,9 +293,9 @@ impl Renderer {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.01,
-                            g: 0.01,
-                            b: 0.02,
+                            r: 0.0,
+                            g: 0.0,
+                            b: 0.0,
                             a: 1.0,
                         }),
                         store: wgpu::StoreOp::Store,
@@ -197,26 +313,105 @@ impl Renderer {
                 timestamp_writes: None,
             });
 
+            // Renderizar skybox primero
+            render_pass.set_pipeline(&self.state.skybox_pipeline);
+            render_pass.set_bind_group(0, &self.state.skybox_bind_group, &[]);
+            render_pass.set_vertex_buffer(0, self.state.skybox_vertex_buffer.slice(..));
+            render_pass.set_index_buffer(self.state.skybox_index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            render_pass.draw_indexed(0..self.state.skybox_num_indices, 0, 0..1);
+
+            // Renderizar órbitas
+            render_pass.set_pipeline(&self.state.orbit_pipeline);
+            render_pass.set_vertex_buffer(0, self.state.orbit_vertex_buffer.slice(..));
+            render_pass.set_index_buffer(self.state.orbit_index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            
+            for (i, planet) in self.planets.iter().enumerate() {
+                if planet.orbit_radius > 0.0 {
+                    let (start, count) = self.state.orbit_ranges[i];
+                    if count > 0 {
+                        render_pass.set_bind_group(0, &self.state.orbit_bind_groups[i], &[]);
+                        render_pass.draw_indexed(start..(start + count), 0, 0..1);
+                    }
+                }
+            }
+
+            // Renderizar planetas
             render_pass.set_vertex_buffer(0, self.state.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.state.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
 
-            // Renderizar cada planeta con su propio bind group
             for (i, planet) in self.planets.iter().enumerate() {
-                let pipeline = match planet.planet_type {
-                    planets::PlanetType::Sun => &self.state.sun_pipeline,
-                    planets::PlanetType::Rocky => &self.state.rocky_planet_pipeline,
-                    planets::PlanetType::Gas => &self.state.gas_planet_pipeline,
-                };
-
+                let pipeline = &self.state.planet_pipelines[planet.planet_type as usize];
                 render_pass.set_pipeline(pipeline);
-                render_pass.set_bind_group(0, &self.state.uniform_bind_groups[i], &[]);
+                render_pass.set_bind_group(0, &self.state.planet_bind_groups[i], &[]);
                 render_pass.draw_indexed(0..self.state.num_indices, 0, 0..1);
+                
+                // Renderizar luna si existe
+                if planet.has_moon {
+                    if let Some(moon_matrix) = planet.get_moon_model_matrix() {
+                        let moon_uniforms = Uniforms {
+                            view_proj: view_proj.to_cols_array_2d(),
+                            model: moon_matrix.to_cols_array_2d(),
+                            time: self.time,
+                            _padding: [0.0; 3],
+                        };
+                        self.state.queue.write_buffer(
+                            &self.state.moon_uniform_buffers[i],
+                            0,
+                            bytemuck::cast_slice(&[moon_uniforms])
+                        );
+                        
+                        render_pass.set_pipeline(&self.state.moon_pipeline);
+                        render_pass.set_bind_group(0, &self.state.moon_bind_groups[i], &[]);
+                        render_pass.draw_indexed(0..self.state.num_indices, 0, 0..1);
+                    }
+                }
+                
+                // Renderizar anillos si existen
+                if planet.has_rings {
+                    if let Some(ring_matrix) = planet.get_rings_model_matrix() {
+                        let ring_uniforms = Uniforms {
+                            view_proj: view_proj.to_cols_array_2d(),
+                            model: ring_matrix.to_cols_array_2d(),
+                            time: self.time,
+                            _padding: [0.0; 3],
+                        };
+                        self.state.queue.write_buffer(
+                            &self.state.ring_uniform_buffers[i],
+                            0,
+                            bytemuck::cast_slice(&[ring_uniforms])
+                        );
+                        
+                        render_pass.set_pipeline(&self.state.ring_pipeline);
+                        render_pass.set_bind_group(0, &self.state.ring_bind_groups[i], &[]);
+                        render_pass.set_vertex_buffer(0, self.state.ring_vertex_buffer.slice(..));
+                        render_pass.set_index_buffer(self.state.ring_index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                        render_pass.draw_indexed(0..self.state.ring_num_indices, 0, 0..1);
+                        // Restore planet vertex/index buffers for subsequent draws
+                        render_pass.set_vertex_buffer(0, self.state.vertex_buffer.slice(..));
+                        render_pass.set_index_buffer(self.state.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                    }
+                }
             }
+
+            // Renderizar nave
+            render_pass.set_pipeline(&self.state.ship_pipeline);
+            render_pass.set_bind_group(0, &self.state.ship_bind_group, &[]);
+            render_pass.set_vertex_buffer(0, self.state.ship_vertex_buffer.slice(..));
+            render_pass.set_index_buffer(self.state.ship_index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            render_pass.draw_indexed(0..self.state.ship_num_indices, 0, 0..1);
         }
 
         self.state.queue.submit(std::iter::once(encoder.finish()));
         output.present();
 
         Ok(())
+    }
+}
+
+fn ease_in_out_cubic(t: f32) -> f32 {
+    if t < 0.5 {
+        4.0 * t * t * t
+    } else {
+        1.0 - (-2.0 * t + 2.0).powi(3) / 2.0
     }
 }

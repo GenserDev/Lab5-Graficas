@@ -1,0 +1,9 @@
+C:\Users\gense\OneDrive\Documents\Genser-U\Graficas\laboratorios\Proyecto-Final-Graficas\planetas\target\debug\deps\glutin_wgl_sys-9e85684e1f180770.d: C:\Users\gense\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\glutin_wgl_sys-0.6.1\src\lib.rs C:\Users\gense\OneDrive\Documents\Genser-U\Graficas\laboratorios\Proyecto-Final-Graficas\planetas\target\debug\build\glutin_wgl_sys-b91eea7d31606e44\out/wgl_bindings.rs C:\Users\gense\OneDrive\Documents\Genser-U\Graficas\laboratorios\Proyecto-Final-Graficas\planetas\target\debug\build\glutin_wgl_sys-b91eea7d31606e44\out/wgl_extra_bindings.rs
+
+C:\Users\gense\OneDrive\Documents\Genser-U\Graficas\laboratorios\Proyecto-Final-Graficas\planetas\target\debug\deps\libglutin_wgl_sys-9e85684e1f180770.rmeta: C:\Users\gense\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\glutin_wgl_sys-0.6.1\src\lib.rs C:\Users\gense\OneDrive\Documents\Genser-U\Graficas\laboratorios\Proyecto-Final-Graficas\planetas\target\debug\build\glutin_wgl_sys-b91eea7d31606e44\out/wgl_bindings.rs C:\Users\gense\OneDrive\Documents\Genser-U\Graficas\laboratorios\Proyecto-Final-Graficas\planetas\target\debug\build\glutin_wgl_sys-b91eea7d31606e44\out/wgl_extra_bindings.rs
+
+C:\Users\gense\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\glutin_wgl_sys-0.6.1\src\lib.rs:
+C:\Users\gense\OneDrive\Documents\Genser-U\Graficas\laboratorios\Proyecto-Final-Graficas\planetas\target\debug\build\glutin_wgl_sys-b91eea7d31606e44\out/wgl_bindings.rs:
+C:\Users\gense\OneDrive\Documents\Genser-U\Graficas\laboratorios\Proyecto-Final-Graficas\planetas\target\debug\build\glutin_wgl_sys-b91eea7d31606e44\out/wgl_extra_bindings.rs:
+
+# env-dep:OUT_DIR=C:\\Users\\gense\\OneDrive\\Documents\\Genser-U\\Graficas\\laboratorios\\Proyecto-Final-Graficas\\planetas\\target\\debug\\build\\glutin_wgl_sys-b91eea7d31606e44\\out
