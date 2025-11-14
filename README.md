@@ -1,14 +1,10 @@
 <h1 align="center">
-  Laboratorio 5 - Graficas
+  La Galaxia de la Fiesta Infinita. 
 </h1>
 
 <p align="center">
 <br>
-Para este lab, tienen que diseñar 3 cuerpos celestes y crearlos en su software renderer usando solamente shaders (no texturas o materiales).
-
-- Deben crear una “estrella” que va a servir como el sol de su sistema solar. 
-- Deben crear un planeta rocoso. 
-- Deben crear un gigante gaseoso. 
+En los confines del cosmos existe La Galaxia de la Fiesta Infinita, un sistema solar donde la celebración nunca termina. En su corazón arde el Sol de la Fiesta con colores arcoíris, rodeado por seis mundos extraordinarios: el espejado Planeta Disco, el electrizante Planeta Rave con anillos neón, el paradisíaco Planeta Tropical, el cyberpunk Planeta Neón custodiado por su luna lavanda, y el explosivo Planeta Carnaval cubierto de confeti cósmico. Tres lunas místicas orbitan estos mundos mientras las estrellas del infinito observan el espectáculo más grandioso del universo: una fiesta que trasciende el tiempo mismo.
 </p>
 <br>
 
@@ -17,12 +13,27 @@ Para este lab, tienen que diseñar 3 cuerpos celestes y crearlos en su software 
 
 
 
-https://github.com/user-attachments/assets/52fcce0c-592a-42ea-b071-9d0bd02627aa
+
+https://github.com/user-attachments/assets/37dbe611-56e6-485e-ae85-023caa3414c3
+
+
+
 
 
   
 <br>
 </p>
+
+## 🌌 Planetas del sistema
+
+A continuación se presenta la lista de planetas incluidos en el proyecto:
+
+- **Sol de la Fiesta**
+- **Planeta Disco** (con su luna)
+- **Planeta Rave** (con anillos brillantes)
+- **Planeta Tropical**
+- **Planeta Neón** (con su luna y anillos)
+- **Planeta Carnaval** (con su luna)
 
 ## Requisitos
 - Lenguaje Rust
@@ -31,11 +42,11 @@ https://github.com/user-attachments/assets/52fcce0c-592a-42ea-b071-9d0bd02627aa
 ## ¿Como ejecutar el programa? 
 1. Clonar el repositorio.
 ```
-git clone https://github.com/GenserDev/Lab5-Graficas.git
+git clone https://github.com/GenserDev/Proyecto-Final-Graficas.git
 ```
 2. Entrar a la carpeta del repositorio.
 ```
-cd Lab5-Graficas
+cd Proyecto-Final-Graficas
 ```
 3. Abrir su compilador de C y C++ y ejecutar los comandos
 
